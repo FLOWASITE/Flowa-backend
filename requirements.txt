@@ -1,12 +1,21 @@
+# File: requirements.txt
+
+# Core framework and server
 python-dotenv==1.0.1
 fastapi==0.110.0
-uvicorn[standard]==0.30.6  
-langchain~=0.2.11          
-langchain-openai~=0.1.17   
-openai~=1.35.0             
-tiktoken==0.6.0            
+uvicorn[standard]==0.30.6
+
+# Langchain and OpenAI related
+langchain~=0.2.11
+langchain-openai~=0.1.17
+openai~=1.35.0
+tiktoken~=0.7.0            # <--- THAY ĐỔI QUAN TRỌNG: Nâng cấp tiktoken
+
+# Database and Supabase
 supabase==1.0.5
-psycopg2-binary==2.9.10    
-pydantic==2.11.4           
-numpy==1.26.4               
-python-multipart==0.0.7    
+psycopg2-binary==2.9.10
+
+# Data validation and utilities
+pydantic==2.11.4
+numpy~=1.26.4              # Giữ numpy 1.26.x để tránh xung đột trước đó
+python-multipart==0.0.7
