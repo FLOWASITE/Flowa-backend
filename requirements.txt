@@ -1,19 +1,12 @@
 python-dotenv==1.0.1
 fastapi==0.110.0
-uvicorn[standard]==0.30.6  # Giữ phiên bản của bạn, nếu có vấn đề, thử uvicorn[standard]~=0.29.0
-
-# Langchain and OpenAI related
-# Langchain 0.2.x là series mới và được khuyến khích
-langchain~=0.2.11          # Hoặc một bản vá mới nhất của 0.2.x
-langchain-openai~=0.1.17   # Hoặc một bản vá mới nhất của 0.1.x, tương thích với langchain ở trên
-openai~=1.35.0             # Cần phiên bản mới hơn cho langchain-openai mới
-tiktoken==0.6.0            # Phiên bản này vẫn ổn với openai mới
-
-# Database and Supabase
+uvicorn[standard]==0.30.6  
+langchain~=0.2.11          
+langchain-openai~=0.1.17   
+openai~=1.35.0             
+tiktoken==0.6.0            
 supabase==1.0.5
-psycopg2-binary==2.9.10    # Giữ phiên bản của bạn, hoặc 2.9.9 (phổ biến)
-
-# Data validation and utilities
-pydantic==2.11.4           # FastAPI 0.110.0 tương thích tốt với Pydantic v2
-numpy==2.2.5               # Giữ phiên bản của bạn, lưu ý nếu có xung đột với thư viện con
-python-multipart==0.0.7    # Giữ phiên bản của bạn, hoặc 0.0.9 (mới nhất)
+psycopg2-binary==2.9.10    
+pydantic==2.11.4           
+numpy==1.26.4               
+python-multipart==0.0.7    
