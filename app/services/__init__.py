@@ -1,0 +1,1 @@
+"""Service layer for interacting with OpenAI, LangChain, and embeddings.""" 
