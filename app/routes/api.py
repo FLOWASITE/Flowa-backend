@@ -1,7 +1,12 @@
-from fastapi import APIRouter, Body, Query, HTTPException
-from typing import Optional, List
-from pydantic import BaseModel
+from fastapi import APIRouter, Body, Query, HTTPException, Response, Depends
+import os
+import json
+import base64
+from fastapi.responses import JSONResponse, Response
 from app.controllers.content_controller import ContentController
+from app.utils.database import get_db_connection
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/api", tags=["content"])
 content_controller = ContentController()
@@ -191,3 +196,152 @@ async def approve_topics(request: TopicApprovalRequest):
         raise HTTPException(status_code=500, detail=result.get("error"))
     
     return result 
+
+class ApprovedTopicContentRequest(BaseModel):
+    topic_id: str = Field(..., description="ID của chủ đề đã được duyệt để tạo nội dung")
+    with_related: bool = Field(default=True, description="Có sử dụng nội dung liên quan làm ngữ cảnh hay không")
+    save_to_db: bool = Field(default=True, description="Có lưu nội dung đã tạo vào cơ sở dữ liệu hay không")
+
+@router.post("/content/generate-from-approved")
+async def generate_content_from_approved_topic(request: ApprovedTopicContentRequest):
+    """
+    Tạo nội dung cho một chủ đề cụ thể đã được duyệt sử dụng RAG.
+    
+    - Yêu cầu ID của chủ đề đã được duyệt
+    - Tạo nội dung cho chủ đề sử dụng RAG
+    - Tùy chọn sử dụng nội dung liên quan làm ngữ cảnh
+    - Lưu nội dung đã tạo vào cơ sở dữ liệu
+    - Trả về nội dung đã tạo
+    """
+    result = await content_controller.generate_content_from_approved_topic(
+        topic_id=request.topic_id,
+        with_related=request.with_related,
+        save_to_db=request.save_to_db
+    )
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error"))
+    
+    return result
+
+class ContentGenerateFromApprovedRequest(BaseModel):
+    topic_id: str
+    with_related: bool = True
+    save_to_db: bool = True
+
+@router.post('/content/generate-from-approved')
+def generate_content_from_approved(request: ContentGenerateFromApprovedRequest):
+    """
+    Endpoint để tạo nội dung từ chủ đề đã được duyệt
+    """
+    if not request.topic_id:
+        raise HTTPException(status_code=400, detail="Topic ID is required")
+    
+    content_controller = ContentController()
+    result = content_controller.generate_content_from_approved_topic(
+        request.topic_id, 
+        request.with_related, 
+        request.save_to_db
+    )
+    
+    return result
+
+class ContentImageResponse(BaseModel):
+    error: Optional[str] = None
+
+@router.get('/content/view-image/{content_id}')
+def view_content_image(content_id: str):
+    """
+    Endpoint để hiển thị ảnh từ base64 data của nội dung
+    """
+    try:
+        # Kết nối đến cơ sở dữ liệu
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Kiểm tra xem có cột preview_image không
+        cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'content' AND column_name = 'preview_image'")
+        has_preview_image = cursor.fetchone() is not None
+        
+        if not has_preview_image:
+            return JSONResponse(status_code=404, content={'error': 'Preview image column does not exist'})
+        
+        # Lấy dữ liệu ảnh từ cơ sở dữ liệu
+        cursor.execute("SELECT content, preview_image FROM content WHERE id = %s", (content_id,))
+        result = cursor.fetchone()
+        
+        if not result:
+            return JSONResponse(status_code=404, content={'error': 'Content not found'})
+        
+        content_json, preview_image = result
+        
+        if not preview_image:
+            # Nếu không có preview_image, thử lấy từ trường content
+            content_data = json.loads(content_json)
+            if 'preview_image' in content_data:
+                preview_image = content_data['preview_image']
+            elif 'image' in content_data and 'base64_data' in content_data['image']:
+                image_format = content_data['image'].get('format', 'png')
+                preview_image = f"data:image/{image_format};base64,{content_data['image']['base64_data']}"
+        
+        if not preview_image:
+            return JSONResponse(status_code=404, content={'error': 'No image found for this content'})
+        
+        # Trích xuất dữ liệu base64 từ URL data
+        if preview_image.startswith('data:'):
+            mime_type, base64_data = preview_image.split(';base64,', 1)
+            image_data = base64.b64decode(base64_data)
+            
+            # Xác định loại MIME
+            if 'png' in mime_type:
+                mime_type = 'image/png'
+            elif 'jpeg' in mime_type or 'jpg' in mime_type:
+                mime_type = 'image/jpeg'
+            else:
+                mime_type = 'image/png'  # Mặc định
+            
+            # Trả về ảnh
+            return Response(content=image_data, media_type=mime_type)
+        else:
+            return JSONResponse(status_code=400, content={'error': 'Invalid image data format'})
+    
+    except Exception as e:
+        return JSONResponse(status_code=500, content={'error': str(e)})
+    finally:
+        if 'conn' in locals() and conn is not None:
+            conn.close()
+
+class SqlScriptResponse(BaseModel):
+    message: Optional[str] = None
+    error: Optional[str] = None
+
+@router.post('/admin/run-sql-script', response_model=SqlScriptResponse)
+def run_sql_script():
+    """
+    Endpoint để thực thi script SQL để thêm các cột mới vào bảng content
+    """
+    try:
+        # Kết nối đến cơ sở dữ liệu
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Đọc script SQL
+        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'scripts', 'add_columns_to_content.sql')
+        
+        if not os.path.exists(script_path):
+            return JSONResponse(status_code=404, content={'error': 'SQL script not found'})
+        
+        with open(script_path, 'r') as f:
+            sql_script = f.read()
+        
+        # Thực thi script
+        cursor.execute(sql_script)
+        conn.commit()
+        
+        return {'message': 'SQL script executed successfully'}
+    
+    except Exception as e:
+        return JSONResponse(status_code=500, content={'error': str(e)})
+    finally:
+        if 'conn' in locals() and conn is not None:
+            conn.close()

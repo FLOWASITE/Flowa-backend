@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import api, embeddings
+from app.routes import api, embeddings, auth
 
 app = FastAPI(
     title="AI Content Generation Backend",
@@ -20,6 +20,7 @@ app.add_middleware(
 # Include API routes
 app.include_router(api.router)
 app.include_router(embeddings.router)
+app.include_router(auth.router)
 
 @app.get("/")
 async def root():
