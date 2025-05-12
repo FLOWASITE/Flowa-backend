@@ -5,7 +5,7 @@ from uuid import UUID
 
 
 class SocialAccountBase(BaseModel):
-    platform_name: str  # Chỉ giữ platform_name, không cần platform_id
+    platform_name: Optional[str] = None
     brand_id: UUID
     account_name: str
     account_id: str
@@ -29,7 +29,6 @@ class SocialAccountUpdate(BaseModel):
     token_expires_at: Optional[datetime] = None
     account_type: Optional[str] = None
     status: Optional[str] = None
-    account_picture: Optional[str] = None
 
 
 class SocialAccount(SocialAccountBase):
