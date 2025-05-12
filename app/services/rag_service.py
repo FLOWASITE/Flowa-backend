@@ -7,6 +7,9 @@ from config.settings import OPENAI_API_KEY, MODEL_NAME, EMBEDDING_MODEL
 from app.utils.database import get_supabase_client, fetch_data
 from app.services.embedding_service import EmbeddingService
 import json
+import requests
+import base64
+from openai import OpenAI
 
 class RAGService:
     def __init__(self):
@@ -465,3 +468,66 @@ class RAGService:
         formatted_prompt = refine_prompt.format(topic=topic, prompt=prompt)
         response = self.openai.invoke(formatted_prompt)
         return response.content 
+        
+    def generate_image_from_content(self, content, size="1024x1024"):
+        """
+        Tạo ảnh từ nội dung sử dụng OpenAI DALL-E.
+        
+        Args:
+            content (str): Nội dung để tạo ảnh
+            size (str): Kích thước ảnh (mặc định: 1024x1024)
+            
+        Returns:
+            dict: Thông tin ảnh đã tạo bao gồm URL và base64 data
+        """
+        try:
+            # Tạo mô tả ảnh từ nội dung
+            image_prompt_template = """
+            Bạn là một chuyên gia tạo mô tả hình ảnh cho AI tạo ảnh.
+            
+            Dựa trên nội dung sau đây, hãy tạo ra một mô tả hình ảnh chi tiết, rõ ràng và hấp dẫn bằng tiếng Anh:
+            
+            {content}
+            
+            Mô tả hình ảnh nên:
+            1. Chi tiết và cụ thể
+            2. Dễ hình dung
+            3. Phù hợp với nội dung
+            4. Tối đa 100 từ
+            5. Bằng tiếng Anh
+            
+            Chỉ trả về mô tả hình ảnh, không thêm giải thích hoặc bình luận nào khác.
+            """
+            
+            image_prompt = PromptTemplate(
+                template=image_prompt_template,
+                input_variables=["content"]
+            )
+            
+            formatted_prompt = image_prompt.format(content=content)
+            image_description = self.openai.invoke(formatted_prompt).content
+            
+            # Sử dụng OpenAI API để tạo ảnh
+            client = OpenAI(api_key=OPENAI_API_KEY)
+            response = client.images.generate(
+                model="dall-e-3",
+                prompt=image_description,
+                size=size,
+                quality="standard",
+                n=1,
+                response_format="b64_json"
+            )
+            
+            # Lấy thông tin ảnh
+            image_data = response.data[0].b64_json
+            
+            # Trả về thông tin ảnh
+            return {
+                "description": image_description,
+                "base64_data": image_data,
+                "format": "png"
+            }
+            
+        except Exception as e:
+            print(f"Lỗi khi tạo ảnh: {str(e)}")
+            return None

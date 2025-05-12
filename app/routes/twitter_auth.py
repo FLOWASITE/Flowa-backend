@@ -1,22 +1,67 @@
 from fastapi import APIRouter, HTTPException
-import requests
 from pydantic import BaseModel
+import requests
 from base64 import b64encode
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 router = APIRouter(prefix="/twitter", tags=["Twitter OAuth"])
 
+
+# ====================== POST TWEET MODEL ======================
+class TweetRequest(BaseModel):
+    tweet: str
+    access_token: str
+
+
+@router.post("/tweet")
+async def post_tweet(request: TweetRequest):
+    tweet_url = "https://api.twitter.com/2/tweets"
+
+    headers = {
+        "Authorization": f"Bearer {request.access_token}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "text": request.tweet
+    }
+
+    try:
+        response = requests.post(tweet_url, json=payload, headers=headers)
+        response_data = response.json()
+
+        if response.status_code != 201:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"Twitter API error: {response_data.get('detail', response_data)}"
+            )
+
+        return {
+            "status": "success",
+            "tweet_id": response_data.get("data", {}).get("id"),
+            "tweet_text": response_data.get("data", {}).get("text")
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error posting tweet: {str(e)}")
+
+
+# ====================== CALLBACK MODEL & ROUTE ======================
 class TwitterCallbackRequest(BaseModel):
     code: str
     code_verifier: str
+
 
 @router.post("/callback")
 async def twitter_callback(request: TwitterCallbackRequest):
     token_url = "https://api.twitter.com/2/oauth2/token"
     user_info_url = "https://api.twitter.com/2/users/me"
 
-    client_id = "TTFvOGtnVXF4ZUhicnF6NExiTGY6MTpjaQ"
-    client_secret = "amomd9_mHnXUJXwA3OjJ_kpz8Toec6-Ejog6FRYhV5mubfqWdC"
+    client_id = os.getenv("TWITTER_CLIENT_ID")
+    client_secret = os.getenv("TWITTER_CLIENT_SECRET")
     redirect_uri = "https://localhost:8080/auth/twitter/callback"
 
     basic_token = b64encode(f"{client_id}:{client_secret}".encode()).decode()
@@ -58,7 +103,6 @@ async def twitter_callback(request: TwitterCallbackRequest):
             "username": user_info["data"]["username"],
             "profile_image_url": user_info["data"]["profile_image_url"]
         }
-
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching data from Twitter: {str(e)}")

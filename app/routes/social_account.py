@@ -1,61 +1,70 @@
-from fastapi import APIRouter, HTTPException
-from typing import List, Optional
-from pydantic import BaseModel
-from app.controllers.social_controller import SocialController
+from fastapi import APIRouter, HTTPException, Depends
+from app.models.social_account import SocialAccountCreate, SocialAccountUpdate, SocialAccount
+from app.services.social_account_service import SocialAccountService
+from typing import List
 
-router = APIRouter(prefix="/api/social", tags=["social"])
-social_controller = SocialController()
+router = APIRouter(prefix="/api", tags=["socialAccounts"])
 
-class SocialAccountRequest(BaseModel):
-    user_id: str
-    platform: str  # ví dụ: "facebook", "google"
-    account_id: str
-    profile_url: Optional[str] = None
+@router.post("/social-accounts/", response_model=SocialAccount)
+async def create_social_account(
+    social_account_data: SocialAccountCreate,
+    service: SocialAccountService = Depends()
+):
+    try:
+        return await service.create_social_account(social_account_data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-class SocialAccountApprovalRequest(BaseModel):
-    account_ids: List[str]
-    approve: bool
+@router.get("/social-accounts/{account_id}", response_model=SocialAccount)
+async def get_social_account(
+    account_id: str,
+    service: SocialAccountService = Depends()
+):
+    try:
+        return await service.get_social_account(account_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
-@router.post("/link")
-async def link_social_account(request: SocialAccountRequest):
-    """
-    Liên kết tài khoản mạng xã hội với người dùng.
-    """
-    result = await social_controller.link_account(
-        user_id=request.user_id,
-        platform=request.platform,
-        account_id=request.account_id,
-        profile_url=request.profile_url
-    )
-    
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error"))
-    
-    return result
+@router.put("/social-accounts/{account_id}", response_model=SocialAccount)
+async def update_social_account(
+    account_id: str,
+    social_account_data: SocialAccountUpdate,
+    service: SocialAccountService = Depends()
+):
+    try:
+        return await service.update_social_account(account_id, social_account_data)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
-@router.get("/accounts")
-async def get_social_accounts(user_id: str):
-    """
-    Lấy danh sách tài khoản mạng xã hội đã liên kết cho một user.
-    """
-    result = await social_controller.get_accounts(user_id=user_id)
-    
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
-    
-    return result
+@router.delete("/social-accounts/{account_id}")
+async def delete_social_account(
+    account_id: str,
+    service: SocialAccountService = Depends()
+):
+    try:
+        await service.delete_social_account(account_id)
+        return {"message": "Social account deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
-@router.post("/approve")
-async def approve_social_accounts(request: SocialAccountApprovalRequest):
-    """
-    Duyệt hoặc từ chối danh sách tài khoản mạng xã hội.
-    """
-    result = await social_controller.approve_accounts(
-        account_ids=request.account_ids,
-        approve=request.approve
-    )
-    
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error"))
-    
-    return result
+@router.get("/social-accounts/user/{user_id}", response_model=List[SocialAccount])
+async def get_social_accounts_by_user(
+    user_id: str,
+    service: SocialAccountService = Depends()
+):
+    try:
+        return await service.list_social_accounts(user_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@router.get("/social-accounts/user/{user_id}/brand/{brand_id}", response_model=List[SocialAccount])
+async def get_social_accounts_by_user_and_brand(
+    user_id: str,
+    brand_id: str,
+    service: SocialAccountService = Depends()
+):
+    try:
+        return await service.list_social_accounts(user_id, brand_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+

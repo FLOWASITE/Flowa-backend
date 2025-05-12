@@ -21,4 +21,16 @@ DB_PORT = os.getenv("DB_PORT", "5432")
 # Application Settings
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4-turbo")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-ada-002")
-EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", "1536")) 
+EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", "1536"))
+
+# JWT Settings
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+JWT_EXPIRATION_MINUTES = int(os.getenv("JWT_EXPIRATION_MINUTES", "1440"))  # 24 hours
+
+# Email Settings
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USERNAME = os.getenv("EMAIL_USERNAME", "")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
+EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@example.com")

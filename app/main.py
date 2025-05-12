@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import api, embeddings
+from app.routes import api, embeddings, auth, social_account
 from app.routes import twitter_auth
 from app.routes.google_auth import router as google_auth_router
 
@@ -24,6 +24,8 @@ app.include_router(api.router)
 app.include_router(twitter_auth.router)
 app.include_router(embeddings.router)
 app.include_router(google_auth_router)
+app.include_router(social_account.router)
+app.include_router(auth.router)
 
 @app.get("/")
 async def root():
