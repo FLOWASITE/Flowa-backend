@@ -7,7 +7,7 @@ load_dotenv()
 
 if __name__ == "__main__":
     # Get port from environment variable or use default
-    port = int(os.getenv("PORT", "8009"))
+    port = int(os.getenv("PORT", "8008"))
     
     # Run the FastAPI application with uvicorn
     uvicorn.run(

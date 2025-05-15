@@ -17,8 +17,8 @@ def get_db_connection():
         # Connection parameters
         params = {
             'host': DB_HOST,
-            'port': '6543',  # Connection pooler port
-            'database': 'postgres',
+            'port': DB_PORT,  # Connection pooler port from settings
+            'database': DB_NAME if DB_NAME else 'postgres',
             'user': DB_USER,
             'password': DB_PASSWORD,
             'sslmode': 'require',
