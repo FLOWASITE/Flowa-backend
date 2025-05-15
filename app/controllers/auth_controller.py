@@ -1,5 +1,6 @@
 from fastapi import HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordBearer
+<<<<<<< HEAD
 from app.models.user import UserCreate, UserLogin, UserVerify, TokenData, GoogleUser
 from app.services.auth_service import AuthService
 import jwt
@@ -15,6 +16,13 @@ import json
 from datetime import datetime, timedelta
 import uuid
 import traceback
+=======
+from app.models.user import UserCreate, UserLogin, UserVerify, TokenData
+from app.services.auth_service import AuthService
+import jwt
+from jwt.exceptions import PyJWTError
+from config.settings import JWT_SECRET_KEY, JWT_ALGORITHM
+>>>>>>> 002a27b73fcaf15bfe475d9be9273725eb38e1a7
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 auth_service = AuthService()
@@ -32,6 +40,7 @@ class AuthController:
         """Authenticate a user and return a JWT token."""
         return await auth_service.login_user(login_data)
     
+<<<<<<< HEAD
     async def get_google_auth_url(self):
         """Create a Google OAuth URL for user authentication."""
         oauth_url = f"https://accounts.google.com/o/oauth2/auth?"
@@ -340,6 +349,8 @@ class AuthController:
         print(f"Generated token with expiration: {expire}, payload: {to_encode}")
         return encoded_jwt
     
+=======
+>>>>>>> 002a27b73fcaf15bfe475d9be9273725eb38e1a7
     async def get_current_user(self, token: str = Depends(oauth2_scheme)):
         """Get the current authenticated user from the JWT token."""
         credentials_exception = HTTPException(
