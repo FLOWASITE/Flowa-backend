@@ -43,7 +43,7 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
     user_id: Optional[str] = None
-<<<<<<< HEAD
+
 
 
 class GoogleAuthRequest(BaseModel):
@@ -56,5 +56,4 @@ class GoogleUser(BaseModel):
     given_name: Optional[str] = None
     family_name: Optional[str] = None
     locale: Optional[str] = None
-=======
->>>>>>> 002a27b73fcaf15bfe475d9be9273725eb38e1a7
+

@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from app.models.user import UserCreate, UserLogin, UserVerify, Token, GoogleAuthRequest
@@ -6,13 +6,13 @@ from app.controllers.auth_controller import AuthController, oauth2_scheme
 from typing import Optional
 from fastapi.responses import RedirectResponse
 from config.settings import GOOGLE_REDIRECT_URI
-=======
+
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from app.models.user import UserCreate, UserLogin, UserVerify, Token
 from app.controllers.auth_controller import AuthController, oauth2_scheme
 from typing import Optional
->>>>>>> 002a27b73fcaf15bfe475d9be9273725eb38e1a7
+
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 auth_controller = AuthController()
@@ -80,7 +80,7 @@ async def get_current_user(current_user = Depends(auth_controller.get_current_us
         "created_at": current_user["created_at"],
         "updated_at": current_user["updated_at"]
     }
-<<<<<<< HEAD
+
 
 @router.post("/google", response_model=Token)
 async def google_auth(auth_data: GoogleAuthRequest, response: Response):
@@ -218,5 +218,4 @@ async def google_callback(code: str = None, error: str = None, scope: str = None
         token_handler_url = "https://localhost:3000/token-handler"
         redirect_url = f"{token_handler_url}?token={fallback_token}&error=internal_server_error&message=Server+error"
         return RedirectResponse(url=redirect_url)
-=======
->>>>>>> 002a27b73fcaf15bfe475d9be9273725eb38e1a7
+

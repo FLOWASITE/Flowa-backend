@@ -189,13 +189,12 @@ class AuthService:
     
     async def login_user(self, login_data: UserLogin):
         """Authenticate a user and return a JWT token."""
-<<<<<<< HEAD
         print(f"[LOGIN] Attempting login for user: {login_data.email}")
         conn = None
         cursor = None
         
         try:
-            # Kết nối database
+            # Connect to database
             conn = get_db_connection()
             print(f"[LOGIN] Database connection established successfully")
             cursor = conn.cursor()
@@ -204,27 +203,14 @@ class AuthService:
             cursor.execute("SELECT * FROM users WHERE email = %s", (login_data.email,))
             user = cursor.fetchone()
             print(f"[LOGIN] User query result: {user is not None}")
-=======
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        try:
-            # Check if user exists
-            cursor.execute("SELECT * FROM users WHERE email = %s", (login_data.email,))
-            user = cursor.fetchone()
->>>>>>> 002a27b73fcaf15bfe475d9be9273725eb38e1a7
             
             if not user:
                 raise HTTPException(status_code=401, detail="Invalid email or password")
             
             # Verify password
-<<<<<<< HEAD
             password_verified = self.verify_password(login_data.password, user["password_hash"])
             print(f"[LOGIN] Password verification: {password_verified}")
             if not password_verified:
-=======
-            if not self.verify_password(login_data.password, user["password_hash"]):
->>>>>>> 002a27b73fcaf15bfe475d9be9273725eb38e1a7
                 raise HTTPException(status_code=401, detail="Invalid email or password")
             
             # Check if user is verified
@@ -235,10 +221,7 @@ class AuthService:
             access_token = self.create_access_token(
                 data={"sub": user["email"], "user_id": str(user["id"])}
             )
-<<<<<<< HEAD
             print(f"[LOGIN] Successfully created access token")
-=======
->>>>>>> 002a27b73fcaf15bfe475d9be9273725eb38e1a7
             
             return {
                 "success": True,
@@ -257,7 +240,6 @@ class AuthService:
             }
         
         except HTTPException as e:
-<<<<<<< HEAD
             print(f"[LOGIN ERROR] HTTP Exception: {e.detail}")
             raise e
         
@@ -274,13 +256,3 @@ class AuthService:
             if conn:
                 conn.close()
             print("[LOGIN] Database connection closed")
-=======
-            raise e
-        
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
-        
-        finally:
-            cursor.close()
-            conn.close()
->>>>>>> 002a27b73fcaf15bfe475d9be9273725eb38e1a7

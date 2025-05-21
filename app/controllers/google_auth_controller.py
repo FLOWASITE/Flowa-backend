@@ -11,6 +11,7 @@ import secrets
 import logging
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
+import psycopg2
 
 from fastapi import HTTPException, Depends
 from google.oauth2 import id_token
@@ -25,6 +26,7 @@ from config.settings import (
     JWT_ALGORITHM
 )
 from app.models.user import GoogleUser
+from app.utils.database import get_db_connection
 
 # Thiết lập logging
 logger = logging.getLogger("google_auth")
@@ -91,13 +93,80 @@ class GoogleAuthController:
             logger.info("STEP 2: Verifying token and getting user info...")
             user_info = await self._verify_and_get_user_info(token_data.get('id_token'))
             
+            # Bước 2.5: Lưu user vào database nếu chưa có
+            conn = None
+            user_id = None
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                
+                # Kiểm tra xem user đã tồn tại chưa
+                cursor.execute("SELECT id FROM users WHERE email = %s", (user_info['email'],))
+                existing = cursor.fetchone()
+                now = datetime.utcnow()
+                
+                if existing:
+                    # Update thông tin user nếu đã có
+                    logger.info(f"Updating existing user with email: {user_info['email']}")
+                    cursor.execute("""
+                        UPDATE users SET full_name=%s, updated_at=%s WHERE email=%s RETURNING id
+                    """, (
+                        user_info.get('name'),  # Sử dụng name từ Google làm full_name
+                        now,
+                        user_info['email']
+                    ))
+                    user_id = str(cursor.fetchone()[0])
+                    logger.info(f"Updated user with ID: {user_id}")
+                else:
+                    # Insert user mới
+                    # Tạo một password_hash mặc định cho Google login
+                    # Sử dụng Google ID làm password để đảm bảo duy nhất
+                    import hashlib
+                    google_id = user_info.get('id', '')
+                    default_password_hash = hashlib.sha256(f"GOOGLE_AUTH_{google_id}".encode()).hexdigest()
+                    
+                    logger.info(f"Creating new user with email: {user_info['email']}")
+                    cursor.execute("""
+                        INSERT INTO users (email, password_hash, full_name, is_active, is_verified, role, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+                    """, (
+                        user_info['email'],
+                        default_password_hash,  # Thêm password_hash mặc định
+                        user_info.get('name'),  # Sử dụng name từ Google làm full_name
+                        True,
+                        True,
+                        'admin',  # Changed from 'user' to 'admin' to match allowed roles in database
+                        now,
+                        now
+                    ))
+                    user_id = str(cursor.fetchone()[0])
+                    logger.info(f"Created new user with ID: {user_id}")
+                
+                # Commit the transaction
+                conn.commit()
+                logger.info(f"Database transaction committed successfully")
+                
+            except Exception as e:
+                logger.error(f"Error saving user to DB: {str(e)}")
+                if conn:
+                    conn.rollback()
+                    logger.info(f"Database transaction rolled back due to error")
+                raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+            finally:
+                if conn:
+                    conn.close()
+
+            if not user_id:
+                logger.error("User ID not found after saving to DB")
+                raise HTTPException(status_code=500, detail="Internal server error: User ID not found")
+
             # In thông tin người dùng (không có thông tin nhạy cảm)
             logger.info(f"User email: {user_info.get('email')}")
             logger.info(f"User name: {user_info.get('name')}")
             
             # Bước 3: Tạo JWT token cho người dùng
             logger.info("STEP 3: Creating JWT token...")
-            access_token = self._create_jwt_token(user_info)
+            access_token = self._create_jwt_token(user_info, user_id)
             
             # Bước 4: Tạo URL chuyển hướng đến dashboard
             dashboard_url = "https://localhost:3000/dashboard"
@@ -226,41 +295,32 @@ class GoogleAuthController:
             logger.error(f"ID token verification failed: {str(e)}")
             raise HTTPException(status_code=400, detail=f"Invalid token: {str(e)}")
     
-    def _create_jwt_token(self, user_info: dict):
+    def _create_jwt_token(self, user_info: dict, user_id: str):
         """
         Tạo JWT token cho người dùng.
         
         Args:
             user_info (dict): Thông tin người dùng từ Google.
+            user_id (str): ID của user trong database.
             
         Returns:
             str: JWT token.
         """
-        logger.info(f"Creating JWT token for user: {user_info.get('email')}")
-        
-        # Đảm bảo ID người dùng tồn tại
-        user_id = user_info.get('id')
-        if not user_id:
-            logger.warning("User ID missing, using email as fallback")
-            user_id = user_info.get('email', 'unknown')
+        logger.info(f"Creating JWT token for user: {user_info.get('email')}, DB ID: {user_id}")
         
         # Thời gian hết hạn: 7 ngày
         expires_delta = timedelta(days=7)
         expire = datetime.utcnow() + expires_delta
         
-        # Tạo payload với thông tin người dùng từ Google
+        # Tạo payload với thông tin người dùng từ Google và user_id từ DB
         to_encode = {
-            "sub": user_info.get('email', ''),
-            "user_id": user_id,
+            "sub": user_info.get('email', ''),  # Sử dụng email làm sub claim để phù hợp với logs
+            "user_id": user_id,  # Thêm user_id riêng
             "name": user_info.get('name', ''),
-            "email": user_info.get('email', ''),
-            "given_name": user_info.get('given_name', ''),
-            "family_name": user_info.get('family_name', ''),
-            "picture": user_info.get('picture', ''),
-            "locale": user_info.get('locale', ''),
+            "provider": "google",
             "exp": expire,
             "iat": datetime.utcnow(),
-            "provider": "google"
+            "iss": "flowa-backend"  # Thêm issuer để phù hợp với logs
         }
         
         # Log thông tin giúp debug

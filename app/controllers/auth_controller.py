@@ -1,6 +1,5 @@
 from fastapi import HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordBearer
-<<<<<<< HEAD
 from app.models.user import UserCreate, UserLogin, UserVerify, TokenData, GoogleUser
 from app.services.auth_service import AuthService
 import jwt
@@ -16,13 +15,11 @@ import json
 from datetime import datetime, timedelta
 import uuid
 import traceback
-=======
 from app.models.user import UserCreate, UserLogin, UserVerify, TokenData
 from app.services.auth_service import AuthService
 import jwt
 from jwt.exceptions import PyJWTError
 from config.settings import JWT_SECRET_KEY, JWT_ALGORITHM
->>>>>>> 002a27b73fcaf15bfe475d9be9273725eb38e1a7
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 auth_service = AuthService()
@@ -40,7 +37,7 @@ class AuthController:
         """Authenticate a user and return a JWT token."""
         return await auth_service.login_user(login_data)
     
-<<<<<<< HEAD
+
     async def get_google_auth_url(self):
         """Create a Google OAuth URL for user authentication."""
         oauth_url = f"https://accounts.google.com/o/oauth2/auth?"
@@ -140,10 +137,12 @@ class AuthController:
             print("[2] Verifying ID token...")
             # Giải mã và xác thực ID token
             try:
+                # Thêm tham số clock_skew_in_seconds để cho phép dung sai thời gian 5 giây
                 id_info = id_token.verify_oauth2_token(
-                    id_token_value, 
-                    google_requests.Request(), 
-                    GOOGLE_CLIENT_ID
+                    id_token_value,
+                    google_requests.Request(),
+                    GOOGLE_CLIENT_ID,
+                    clock_skew_in_seconds=5  # Cho phép chênh lệch 5 giây
                 )
                 
                 # Kiểm tra email đã được xác thực
@@ -158,8 +157,16 @@ class AuthController:
                 print(f"[2.1] Successfully verified Google user: {user_email}")
                 
             except ValueError as e:
-                print(f"[ERROR] Invalid ID token: {str(e)}")
-                raise HTTPException(status_code=400, detail=f"Invalid ID token: {str(e)}")
+                error_message = str(e)
+                print(f"[ERROR] Invalid ID token: {error_message}")
+                
+                # Xử lý đặc biệt cho lỗi "Token used too early"
+                if "Token used too early" in error_message:
+                    detail = f"Invalid ID token: Token used too early. Check that your computer's clock is set correctly."
+                else:
+                    detail = f"Invalid ID token: {error_message}"
+                    
+                raise HTTPException(status_code=400, detail=detail)
             
             print("[3] Creating user in database...")
             # Tạo đối tượng GoogleUser để lưu vào DB
@@ -219,8 +226,7 @@ class AuthController:
         try:
             # Đây chỉ là một phiên bản đơn giản hóa để test
             user_id = str(uuid.uuid4())
-            user_email = "demo@flowa.com"
-            user_name = "Demo User"
+
             
             # Tạo hoặc cập nhật thông tin người dùng trong database trước khi tạo token
             google_user = GoogleUser(
@@ -348,9 +354,7 @@ class AuthController:
         
         print(f"Generated token with expiration: {expire}, payload: {to_encode}")
         return encoded_jwt
-    
-=======
->>>>>>> 002a27b73fcaf15bfe475d9be9273725eb38e1a7
+
     async def get_current_user(self, token: str = Depends(oauth2_scheme)):
         """Get the current authenticated user from the JWT token."""
         credentials_exception = HTTPException(

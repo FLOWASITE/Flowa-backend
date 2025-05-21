@@ -1,26 +1,26 @@
 # File: requirements.txt
 
 # Core framework and server
-python-dotenv==1.0.1
-fastapi==0.110.0
-uvicorn[standard]==0.30.6
+python-dotenv
+fastapi
+uvicorn[standard]
 
 # Langchain and OpenAI related
-langchain~=0.2.11
-langchain-openai~=0.1.17
-langchain-community~=0.2.5  # <--- THÊM DÒNG NÀY (0.2.5 là phiên bản mới nhất của community cho series 0.2.x)
-openai~=1.35.0
-tiktoken~=0.7.0
-
+langchain
+langchain-openai
+langchain-community # <--- THÊM DÒNG NÀY (0.2.5 là phiên bản mới nhất của community cho series 0.2.x)
+openai
+tiktoken
 # Database and Supabase
-supabase==1.0.5
-psycopg2-binary==2.9.10
+supabase
+psycopg2-binary
 
 # Data validation and utilities
-pydantic==2.11.4
-numpy~=1.26.4
-python-multipart==0.0.7
+pydantic
+numpy
+python-multipart
 passlib
-PyJWT-2.10.1
+#PyJWT-2.10.1
 google-auth
 tweepy
+pydantic[email]
