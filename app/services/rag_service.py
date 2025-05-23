@@ -41,7 +41,7 @@ class RAGService:
             client=self.supabase,
             embedding=embeddings,
             table_name=table_name,
-            query_name="match_documents"
+            query_name="match_embeddings"
         )
         
         return vector_store
@@ -100,8 +100,16 @@ class RAGService:
                 brand_context=brand_context,
                 previous_topics_context=previous_topics_context
             )
-            response = self.openai.invoke(formatted_prompt)
-            return response.content
+            try:
+                response = self.openai.invoke(formatted_prompt)
+                return response.content
+            except Exception as api_error:
+                # Check if it's a quota exceeded error
+                error_str = str(api_error).lower()
+                if "quota" in error_str or "exceeded" in error_str or "429" in error_str:
+                    return "OpenAI API quota exceeded. Please check your billing details."
+                else:
+                    return f"Error generating topic: {str(api_error)}"
         
         return generate_topic
     
@@ -140,12 +148,14 @@ class RAGService:
             "topics": [
                 {{
                     "title": "Tiêu đề chủ đề 1",
+                    "description": "Mô tả ngắn về chủ đề",
                     "relevance_score": 85,
                     "seo_keywords": ["từ khóa 1", "từ khóa 2", "từ khóa 3"],
                     "target_audience": "Mô tả đối tượng mục tiêu"
                 }},
                 {{
                     "title": "Tiêu đề chủ đề 2",
+                    "description": "Mô tả ngắn về chủ đề",
                     "relevance_score": 80,
                     "seo_keywords": ["từ khóa 1", "từ khóa 2", "từ khóa 3"],
                     "target_audience": "Mô tả đối tượng mục tiêu"
@@ -163,35 +173,76 @@ class RAGService:
         )
         
         def generate_topics():
-            formatted_prompt = topic_prompt.format(
-                product_info=product_context,
-                brand_info=brand_info,
-                count=count
-            )
-            response = self.openai.invoke(formatted_prompt)
-            
-            # Ensure the response is valid JSON
             try:
-                result = json.loads(response.content)
-                return result
-            except json.JSONDecodeError:
-                # Fallback: If response isn't valid JSON, try to extract JSON
-                content = response.content
-                start_idx = content.find('{')
-                end_idx = content.rfind('}') + 1
+                formatted_prompt = topic_prompt.format(
+                    product_info=product_context,
+                    brand_info=brand_info,
+                    count=count
+                )
                 
-                if start_idx >= 0 and end_idx > start_idx:
-                    json_content = content[start_idx:end_idx]
-                    try:
-                        result = json.loads(json_content)
-                        return result
-                    except:
-                        pass
+                # Try to use OpenAI API
+                try:
+                    response = self.openai.invoke(formatted_prompt)
+                    content = response.content
+                except Exception as api_error:
+                    # Check if it's a quota exceeded error
+                    error_str = str(api_error).lower()
+                    if "quota" in error_str or "exceeded" in error_str or "429" in error_str:
+                        # Return a friendly error message with sample topics
+                        return {
+                            "error": "OpenAI API quota exceeded. Please check your billing details.",
+                            "error_code": 429,
+                            "topics": [
+                                {
+                                    "title": f"Sample Topic 1 for {product_context[:20]}...",
+                                    "description": "This is a sample topic generated when API quota is exceeded.",
+                                    "relevance_score": 80,
+                                    "seo_keywords": ["sample", "topic", "placeholder"],
+                                    "target_audience": "Sample audience"
+                                },
+                                {
+                                    "title": f"Sample Topic 2 for {product_context[:20]}...",
+                                    "description": "This is another sample topic generated when API quota is exceeded.",
+                                    "relevance_score": 75,
+                                    "seo_keywords": ["sample", "topic", "placeholder"],
+                                    "target_audience": "Sample audience"
+                                }
+                            ]
+                        }
+                    else:
+                        # For other errors, return the error message
+                        return {
+                            "error": f"OpenAI API error: {str(api_error)}",
+                            "topics": []
+                        }
                 
-                # If all parsing attempts fail, return a formatted error
+                # Ensure the response is valid JSON
+                try:
+                    result = json.loads(content)
+                    return result
+                except json.JSONDecodeError:
+                    # Fallback: If response isn't valid JSON, try to extract JSON
+                    start_idx = content.find('{')
+                    end_idx = content.rfind('}') + 1
+                    
+                    if start_idx >= 0 and end_idx > start_idx:
+                        json_content = content[start_idx:end_idx]
+                        try:
+                            result = json.loads(json_content)
+                            return result
+                        except:
+                            pass
+                    
+                    # If all parsing attempts fail, return a formatted error
+                    return {
+                        "error": "Không thể định dạng phản hồi thành JSON",
+                        "raw_content": content,
+                        "topics": []
+                    }
+            except Exception as e:
+                # Catch any other exceptions
                 return {
-                    "error": "Không thể định dạng phản hồi thành JSON",
-                    "raw_content": content,
+                    "error": f"Error generating topics: {str(e)}",
                     "topics": []
                 }
         
@@ -235,15 +286,36 @@ class RAGService:
         )
         
         def generate_content():
-            context = ""
-            if related_content:
-                context = "\n\n".join([f"- {item}" for item in related_content])
-            else:
-                context = "Không có ngữ cảnh bổ sung nào được cung cấp. Hãy tạo nội dung gốc dựa trên chủ đề."
+            from openai import RateLimitError, APIError
+            
+            try:
+                context = ""
+                if related_content:
+                    context = "\n\n".join([f"- {item}" for item in related_content])
+                else:
+                    context = "Không có ngữ cảnh bổ sung nào được cung cấp. Hãy tạo nội dung gốc dựa trên chủ đề."
+                    
+                formatted_prompt = content_prompt.format(topic=topic, context=context)
                 
-            formatted_prompt = content_prompt.format(topic=topic, context=context)
-            response = self.openai.invoke(formatted_prompt)
-            return response.content
+                # Set a lower temperature to reduce token usage and improve consistency
+                original_temp = self.openai.temperature
+                self.openai.temperature = 0.5
+                
+                try:
+                    response = self.openai.invoke(formatted_prompt)
+                    return response.content
+                finally:
+                    # Restore original temperature
+                    self.openai.temperature = original_temp
+            except RateLimitError as e:
+                print(f"OpenAI API rate limit exceeded: {str(e)}")
+                raise
+            except APIError as e:
+                print(f"OpenAI API error: {str(e)}")
+                raise
+            except Exception as e:
+                print(f"Unexpected error in content generation: {str(e)}")
+                raise
         
         return generate_content
     
@@ -273,9 +345,51 @@ class RAGService:
         Returns:
             list: List of related content
         """
-        vector_store = self.setup_vector_store("content")
-        results = vector_store.similarity_search(topic, k=limit)
-        return [doc.page_content for doc in results]
+        try:
+            # Skip vector search entirely since it's not working
+            # Use a simple keyword-based approach instead
+            content_items = fetch_data("content", limit=20)  # Get more items to filter
+            
+            if not content_items:
+                # If no content items found, return empty list
+                return []
+            
+            # Extract keywords from topic
+            topic_words = set(topic.lower().split())
+            
+            # Score content items by keyword overlap
+            scored_items = []
+            for item in content_items:
+                content_text = item.get("content", "")
+                if isinstance(content_text, str):
+                    # Try to parse JSON if it looks like JSON
+                    try:
+                        if content_text.strip().startswith('{'):
+                            content_json = json.loads(content_text)
+                            # Extract text from various fields if available
+                            extracted_text = ""
+                            for field in ['facebook', 'instagram', 'linkedin', 'tiktok']:
+                                if field in content_json:
+                                    extracted_text += " " + str(content_json.get(field, ""))
+                            content_text = extracted_text if extracted_text else content_text
+                    except:
+                        # If JSON parsing fails, use the original text
+                        pass
+                        
+                    # Limit content text to reduce token usage
+                    content_text = content_text[:500]  # Limit to 500 chars
+                    
+                    content_words = set(content_text.lower().split())
+                    # Score is the number of overlapping words
+                    overlap = len(topic_words.intersection(content_words))
+                    scored_items.append((overlap, content_text))
+            
+            # Sort by score (highest first) and take the top 'limit' items
+            scored_items.sort(reverse=True)
+            return [item[1] for item in scored_items[:limit]]
+        except Exception as e:
+            print(f"Lỗi khi lấy nội dung liên quan: {str(e)}")
+            return []
     
     def retrieve_brand_info(self, brand_id):
         """
@@ -382,25 +496,55 @@ class RAGService:
         topics_generator = self.create_multiple_topics_generator(product_context, brand_info, count)
         return topics_generator()
     
-    def generate_content_from_topic(self, topic, with_related=True):
+    def generate_content_from_topic(self, topic, with_related=True, max_retries=3):
         """
         Generate content based on a topic.
         
         Args:
             topic (str): The topic to generate content for
             with_related (bool): Whether to include related content as context
+            max_retries (int): Maximum number of retry attempts for rate limiting errors
             
         Returns:
             str: Generated content
         """
+        import time
+        from openai import RateLimitError, APIError
+        
         related_content = None
         
         if with_related:
-            related_content = self.retrieve_related_content(topic)
+            try:
+                related_content = self.retrieve_related_content(topic)
+            except Exception as e:
+                print(f"Error retrieving related content: {str(e)}")
+                # Continue without related content if there's an error
+                related_content = None
         
-        # Create and execute content generator
+        # Create content generator
         content_generator = self.create_content_generator(topic, related_content)
-        return content_generator()
+        
+        # Implement retry logic with exponential backoff
+        retry_count = 0
+        base_delay = 2  # Start with 2 second delay
+        
+        while retry_count <= max_retries:
+            try:
+                return content_generator()
+            except (RateLimitError, APIError) as e:
+                retry_count += 1
+                if retry_count > max_retries:
+                    # If we've exhausted all retries, re-raise the exception
+                    raise
+                
+                # Calculate delay with exponential backoff: 2, 4, 8 seconds
+                delay = base_delay ** retry_count
+                print(f"Rate limit error encountered. Retrying in {delay} seconds. Attempt {retry_count}/{max_retries}")
+                time.sleep(delay)
+            except Exception as e:
+                # For other exceptions, don't retry
+                print(f"Unexpected error in content generation: {str(e)}")
+                raise
 
     def generate_topic_from_context(self, product_context, brand_info=None, previous_topics=None, prompt=None):
         """

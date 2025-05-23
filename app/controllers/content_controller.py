@@ -665,42 +665,46 @@ class ContentController:
             if existing_content:
                 content_item = existing_content[0]
                 existing_content_context = content_item.get("content")
-            
-            # Tạo nội dung mới sử dụng RAG và tối ưu hóa cho mạng xã hội
-            related_content = []
-            
-            # Thêm nội dung hiện có vào ngữ cảnh nếu có
-            if existing_content_context:
-                related_content.append(f"Nội dung hiện có cho chủ đề này: {existing_content_context}")
-            
-            # Thêm nội dung liên quan từ vector store nếu được yêu cầu
-            if with_related:
-                try:
-                    # Lấy nội dung liên quan cho chủ đề này
-                    retrieved_content = self.rag_service.retrieve_related_content(topic_title)
-                    if retrieved_content:
-                        related_content.extend(retrieved_content)
-                except Exception as e:
-                    # Xử lý lỗi khi không thể lấy nội dung liên quan
-                    print(f"Lỗi khi lấy nội dung liên quan: {str(e)}")
-                    # Thêm thông tin về chủ đề và metadata để bổ sung ngữ cảnh
-                    related_content.append(f"Chủ đề: {topic_title}")
-                    if topic.get("keywords"):
-                        related_content.append(f"Từ khóa: {', '.join(topic.get('keywords', []))}")
-                    if topic.get("category"):
-                        related_content.append(f"Danh mục: {topic.get('category', '')}")
-                    if topic.get("target_audience"):
-                        related_content.append(f"Đối tượng mục tiêu: {topic.get('target_audience', '')}")
-                    # Thêm thông tin sản phẩm nếu có
-                    if topic.get("product_id"):
-                        try:
-                            product_data = fetch_data("products", f"id = '{topic.get('product_id')}'")
-                            if product_data:
-                                product = product_data[0]
-                                related_content.append(f"Sản phẩm: {product.get('name', '')}")
-                                related_content.append(f"Mô tả sản phẩm: {product.get('description', '')}")
-                        except:
-                            pass
+            try:
+                # Tạo nội dung mới sử dụng RAG và tối ưu hóa cho mạng xã hội
+                related_content = []
+                
+                # Thêm nội dung hiện có vào ngữ cảnh nếu có
+                if existing_content_context:
+                    related_content.append(f"Nội dung hiện có cho chủ đề này: {existing_content_context}")
+                
+                # Thêm nội dung liên quan từ vector store nếu được yêu cầu
+                if with_related:
+                    try:
+                        # Lấy nội dung liên quan cho chủ đề này
+                        retrieved_content = self.rag_service.retrieve_related_content(topic_title)
+                        if retrieved_content:
+                            related_content.extend(retrieved_content)
+                    except Exception as e:
+                        # Xử lý lỗi khi không thể lấy nội dung liên quan
+                        print(f"Lỗi khi lấy nội dung liên quan: {str(e)}")
+                        # Thêm thông tin về chủ đề và metadata để bổ sung ngữ cảnh
+                        related_content.append(f"Chủ đề: {topic_title}")
+                        if topic.get("keywords"):
+                            related_content.append(f"Từ khóa: {', '.join(topic.get('keywords', []))}")
+                        if topic.get("category"):
+                            related_content.append(f"Danh mục: {topic.get('category', '')}")
+                        if topic.get("target_audience"):
+                            related_content.append(f"Đối tượng mục tiêu: {topic.get('target_audience', '')}")
+                        # Thêm thông tin sản phẩm nếu có
+                        if topic.get("product_id"):
+                            try:
+                                product_data = fetch_data("products", f"id = '{topic.get('product_id')}'")
+                                if product_data:
+                                    product = product_data[0]
+                                    related_content.append(f"Sản phẩm: {product.get('name', '')}")
+                                    related_content.append(f"Mô tả sản phẩm: {product.get('description', '')}")
+                            except Exception as product_error:
+                                print(f"Lỗi khi lấy thông tin sản phẩm: {str(product_error)}")
+                                pass
+            except Exception as e:
+                print(f"Lỗi khi chuẩn bị nội dung liên quan: {str(e)}")
+                related_content = []
             
             # Tạo nội dung cho mạng xã hội
             social_media_template = """
@@ -732,18 +736,65 @@ class ContentController:
                 input_variables=["topic", "context"]
             )
             
-            # Chuẩn bị ngữ cảnh
-            context = "\n\n".join([f"- {item}" for item in related_content]) if related_content else "Không có ngữ cảnh bổ sung nào được cung cấp. Hãy tạo nội dung gốc dựa trên chủ đề."
+            # Chuẩn bị ngữ cảnh - giới hạn độ dài để tránh lỗi token limit
+            # Giới hạn số lượng nội dung liên quan
+            limited_related_content = related_content[:2] if related_content else []
+            
+            # Giới hạn độ dài mỗi mục
+            limited_related_content = [item[:300] for item in limited_related_content]
+            
+            context = "\n\n".join([f"- {item}" for item in limited_related_content]) if limited_related_content else "Không có ngữ cảnh bổ sung nào được cung cấp. Hãy tạo nội dung gốc dựa trên chủ đề."
             
             # Tạo nội dung cho mạng xã hội
             formatted_prompt = social_media_prompt.format(topic=topic_title, context=context)
-            response = self.rag_service.openai.invoke(formatted_prompt)
+            
+            try:
+                # Giảm nhiệt độ để giảm sử dụng token và tăng tính ổn định
+                original_temp = self.rag_service.openai.temperature
+                self.rag_service.openai.temperature = 0.5
+                
+                try:
+                    response = self.rag_service.openai.invoke(formatted_prompt)
+                finally:
+                    # Khôi phục nhiệt độ ban đầu
+                    self.rag_service.openai.temperature = original_temp
+            except Exception as e:
+                error_message = str(e)
+                print(f"Lỗi khi gọi OpenAI API: {error_message}")
+                
+                # Kiểm tra nếu là lỗi rate limit hoặc quota
+                if "rate limit" in error_message.lower() or "quota" in error_message.lower() or "429" in error_message or "insufficient_quota" in error_message.lower():
+                    return {
+                        "success": False,
+                        "error": "Hệ thống đang tạm thời quá tải. Vui lòng thử lại sau ít phút.",
+                        "technical_error": error_message
+                    }
+                
+                # Lỗi khác
+                return {
+                    "success": False,
+                    "error": "Lỗi khi tạo nội dung. Vui lòng thử lại.",
+                    "technical_error": error_message
+                }
             
             try:
                 # Phân tích phản hồi JSON
-                content = json.loads(response.content)
+                # Thêm xử lý để tìm và trích xuất JSON từ nội dung
+                content_str = response.content
+                # Tìm JSON trong nội dung (nếu có ký tự khác ở đầu hoặc cuối)
+                json_start = content_str.find('{')
+                json_end = content_str.rfind('}')
+                
+                if json_start >= 0 and json_end > json_start:
+                    # Trích xuất phần JSON
+                    json_str = content_str[json_start:json_end+1]
+                    content = json.loads(json_str)
+                else:
+                    # Nếu không tìm thấy JSON, sử dụng nội dung gốc
+                    raise json.JSONDecodeError("No JSON found", content_str, 0)
             except json.JSONDecodeError:
                 # Nếu không phải JSON, sử dụng nội dung gốc
+                print(f"Lỗi khi phân tích JSON: {response.content}")
                 content = {
                     "error": "Không thể phân tích nội dung JSON",
                     "raw_content": response.content,
@@ -755,41 +806,46 @@ class ContentController:
                 }
             
             # Tạo ảnh liên quan đến nội dung
-            try:
-                # Tạo một mô tả tổng hợp từ nội dung mạng xã hội
-                image_content = f"Chủ đề: {topic_title}\n\nNội dung Facebook: {content.get('facebook', '')}\n\nNội dung Instagram: {content.get('instagram', '')}\n\nHashtags: {', '.join(content.get('hashtags', []))}"
+            # try:    
+            #     # Tạo một mô tả tổng hợp từ nội dung mạng xã hội
+            #     image_content = f"Chủ đề: {topic_title}\n\nNội dung Facebook: {content.get('facebook', '')}\n\nNội dung Instagram: {content.get('instagram', '')}\n\nHashtags: {', '.join(content.get('hashtags', []))}"
                 
-                # Tạo ảnh từ nội dung
-                image_data = self.rag_service.generate_image_from_content(image_content)
+            #     # Tạo ảnh từ nội dung
+            #     image_data = self.rag_service.generate_image_from_content(image_content)
                 
-                if image_data:
-                    # Thêm thông tin ảnh vào nội dung
-                    content["image"] = {
-                        "description": image_data.get("description", ""),
-                        "base64_data": image_data.get("base64_data", ""),
-                        "format": image_data.get("format", "png")
-                    }
-                    content["preview_image"] = f"data:image/{image_data.get('format', 'png')};base64,{image_data.get('base64_data', '')}"
-                    content["seo_title"] = topic_title
-                    content["seo_description"] = content.get('facebook', '')[:160] if content.get('facebook') else topic_title
-                    content["word_count"] = len(' '.join([content.get('facebook', ''), content.get('instagram', ''), content.get('linkedin', ''), content.get('tiktok', '')]))
-            except Exception as e:
-                print(f"Lỗi khi tạo ảnh: {str(e)}")
-                # Vẫn tiếp tục mà không có ảnh
+            #     if image_data:
+            #         # Thêm thông tin ảnh vào nội dung
+            #         content["image"] = {
+            #             "description": image_data.get("description", ""),
+            #             "base64_data": image_data.get("base64_data", ""),
+            #             "format": image_data.get("format", "png")
+            #         }
+            #         content["preview_image"] = f"data:image/{image_data.get('format', 'png')};base64,{image_data.get('base64_data', '')}"
+            #         content["seo_title"] = topic_title
+            #         content["seo_description"] = content.get('facebook', '')[:160] if content.get('facebook') else topic_title
+            #         content["word_count"] = len(' '.join([content.get('facebook', ''), content.get('instagram', ''), content.get('linkedin', ''), content.get('tiktok', '')]))
+            # except Exception as e:
+            #     print(f"Lỗi khi tạo ảnh: {str(e)}")
+            #     # Vẫn tiếp tục mà không có ảnh
             
             # Tạo embedding vector cho nội dung
             try:
                 # Kết hợp tất cả nội dung để tạo embedding
-                embedding_text = f"Chủ đề: {topic_title}\n\nNội dung Facebook: {content.get('facebook', '')}\n\nNội dung Instagram: {content.get('instagram', '')}\n\nNội dung LinkedIn: {content.get('linkedin', '')}\n\nNội dung TikTok: {content.get('tiktok', '')}\n\nHashtags: {', '.join(content.get('hashtags', []))}"
+                # Giới hạn độ dài văn bản để tránh lỗi token limit
+                facebook_content = content.get('facebook', '')[:300] if content.get('facebook') else ''
+                instagram_content = content.get('instagram', '')[:300] if content.get('instagram') else ''
                 
-                # Tạo embedding vector
-                embedding_vector = self.rag_service.embedding_service.generate_embedding(embedding_text)
+                # embedding_text = f"Chủ đề: {topic_title}\n\nNội dung: {facebook_content} {instagram_content}"
                 
-                # Thêm embedding vector vào nội dung
-                content["embedding"] = embedding_vector
+                # # Tạo embedding vector
+                # embedding_vector = self.rag_service.embedding_service.generate_embedding(embedding_text)
+                
+                # # Thêm embedding vector vào nội dung (chỉ để tham khảo)
+                # content["embedding"] = embedding_vector
             except Exception as e:
                 print(f"Lỗi khi tạo embedding: {str(e)}")
                 # Vẫn tiếp tục mà không có embedding
+                # embedding_vector = None
             
             # Chuyển đổi nội dung JSON thành chuỗi để lưu trữ
             content_json = json.dumps(content, ensure_ascii=False)
@@ -830,9 +886,13 @@ class ContentController:
                         insert_values.append(json.dumps(metadata))
                     
                     # Thêm embedding nếu có cột và đã tạo embedding
-                    if has_embedding_column and "embedding" in content:
+                    if has_embedding_column and embedding_vector is not None:
                         insert_columns.append("embedding")
-                        insert_values.append(content["embedding"])
+                        # Định dạng embedding vector cho PostgreSQL
+                        # PostgreSQL yêu cầu vector được định dạng dưới dạng cụ thể
+                        # Chú ý: Sử dụng cú pháp đặc biệt của PostgreSQL cho kiểu dữ liệu vector
+                        formatted_vector = f"[{','.join(str(x) for x in embedding_vector)}]"
+                        insert_values.append(formatted_vector)
                     
                     # Thêm preview_image nếu có cột và đã tạo ảnh
                     if has_preview_image_column and "preview_image" in content:
@@ -907,121 +967,6 @@ class ContentController:
                         "message": "Đã tạo nội dung mạng xã hội mới nhưng chưa lưu vào cơ sở dữ liệu"
                     }
                 }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
-            
-    async def generate_content_from_approved_topics(self, topic_status="published", limit=5, with_related=True, save_to_db=True):
-        """
-        Generate content from approved topics using RAG.
-        
-        Args:
-            topic_status (str): Status of topics to generate content for (default: published)
-            limit (int): Maximum number of approved topics to generate content for
-            with_related (bool): Whether to include related content as context
-            save_to_db (bool): Whether to save generated content to database
-            
-        Returns:
-            dict: Generated content for each topic
-        """
-        try:
-            # Fetch approved topics from database
-            topics = fetch_data("topics", f"status = '{topic_status}'", limit=limit)
-            
-            if not topics:
-                return {
-                    "success": False,
-                    "error": f"No topics found with status '{topic_status}'"
-                }
-            
-            generated_content = []
-            
-            # Generate content for each topic
-            for topic in topics:
-                topic_id = topic.get("id")
-                topic_title = topic.get("title")
-                
-                # Check if content already exists for this topic
-                existing_content = fetch_data("content", f"topic_id = '{topic_id}'")
-                
-                if existing_content:
-                    # Content already exists for this topic, skip or update based on requirements
-                    content_item = existing_content[0]
-                    generated_content.append({
-                        "id": content_item.get("id"),
-                        "title": topic_title,
-                        "content": content_item.get("content"),
-                        "topic_id": topic_id,
-                        "created_at": content_item.get("created_at"),
-                        "status": "existing"
-                    })
-                    continue
-                
-                # Generate new content using RAG
-                related_content = None
-                if with_related:
-                    # Get related content for this topic
-                    related_content = self.rag_service.retrieve_related_content(topic_title)
-                
-                # Create and execute content generator
-                content_generator = self.rag_service.create_content_generator(topic_title, related_content)
-                content = content_generator()
-                
-                if save_to_db:
-                    # Save content to database
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    
-                    # Create a new content record
-                    query = """
-                    INSERT INTO content (title, content, topic_id, metadata)
-                    VALUES (%s, %s, %s, %s)
-                    RETURNING id, title, created_at
-                    """
-                    
-                    # Prepare metadata
-                    metadata = {
-                        "generated_with_related": with_related,
-                        "topic_status": topic_status,
-                        "topic_category": topic.get("category", ""),
-                        "topic_keywords": topic.get("keywords", [])
-                    }
-                    
-                    cursor.execute(query, (topic_title, content, topic_id, json.dumps(metadata)))
-                    result = cursor.fetchone()
-                    
-                    conn.commit()
-                    cursor.close()
-                    conn.close()
-                    
-                    generated_content.append({
-                        "id": result["id"],
-                        "title": result["title"],
-                        "content": content,
-                        "topic_id": topic_id,
-                        "created_at": result["created_at"],
-                        "status": "new"
-                    })
-                else:
-                    # Return content without saving
-                    generated_content.append({
-                        "id": None,
-                        "title": topic_title,
-                        "content": content,
-                        "topic_id": topic_id,
-                        "created_at": None,
-                        "status": "generated_not_saved"
-                    })
-            
-            return {
-                "success": True,
-                "content": generated_content,
-                "count": len(generated_content)
-            }
-            
         except Exception as e:
             return {
                 "success": False,

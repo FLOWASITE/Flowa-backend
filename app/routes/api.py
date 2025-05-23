@@ -2,6 +2,7 @@ from fastapi import APIRouter, Body, Query, HTTPException, Response, Depends
 import os
 import json
 import base64
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, Response
 from app.controllers.content_controller import ContentController
 from app.utils.database import get_db_connection
@@ -213,38 +214,35 @@ async def generate_content_from_approved_topic(request: ApprovedTopicContentRequ
     - Lưu nội dung đã tạo vào cơ sở dữ liệu
     - Trả về nội dung đã tạo
     """
-    result = await content_controller.generate_content_from_approved_topic(
-        topic_id=request.topic_id,
-        with_related=request.with_related,
-        save_to_db=request.save_to_db
-    )
-    
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
-    
-    return result
-
-class ContentGenerateFromApprovedRequest(BaseModel):
-    topic_id: str
-    with_related: bool = True
-    save_to_db: bool = True
-
-@router.post('/content/generate-from-approved')
-def generate_content_from_approved(request: ContentGenerateFromApprovedRequest):
-    """
-    Endpoint để tạo nội dung từ chủ đề đã được duyệt
-    """
-    if not request.topic_id:
-        raise HTTPException(status_code=400, detail="Topic ID is required")
-    
-    content_controller = ContentController()
-    result = content_controller.generate_content_from_approved_topic(
-        request.topic_id, 
-        request.with_related, 
-        request.save_to_db
-    )
-    
-    return result
+    try:
+        result = await content_controller.generate_content_from_approved_topic(
+            topic_id=request.topic_id,
+            with_related=request.with_related,
+            save_to_db=request.save_to_db
+        )
+        
+        if not result.get("success"):
+            error_message = result.get("error", "Unknown error")
+            technical_error = result.get("technical_error", "")
+            
+            # Kiểm tra nếu là lỗi quota hoặc rate limit của OpenAI
+            if "quota" in error_message.lower() or "rate limit" in error_message.lower() or "429" in error_message or "insufficient_quota" in technical_error:
+                raise HTTPException(
+                    status_code=429, 
+                    detail="Hệ thống đang tạm thời quá tải. Vui lòng thử lại sau ít phút."
+                )
+            else:
+                raise HTTPException(status_code=500, detail=error_message)
+        
+        return result
+    except Exception as e:
+        error_message = str(e)
+        if "quota" in error_message.lower() or "rate limit" in error_message.lower() or "429" in error_message or "insufficient_quota" in error_message:
+            raise HTTPException(
+                status_code=429, 
+                detail="Hệ thống đang tạm thời quá tải. Vui lòng thử lại sau ít phút."
+            )
+        raise HTTPException(status_code=500, detail=error_message)
 
 class ContentImageResponse(BaseModel):
     error: Optional[str] = None

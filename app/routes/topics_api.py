@@ -342,7 +342,22 @@ async def generate_topics(
     except Exception as e:
         if conn:
             conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error generating topics: {str(e)}")
+            
+        # Check if it's a quota exceeded error from the response
+        error_str = str(e).lower()
+        if "quota" in error_str or "exceeded" in error_str or "429" in error_str:
+            # Return a more user-friendly error with status code 429
+            raise HTTPException(
+                status_code=429, 
+                detail={
+                    "message": "You exceeded your current quota, please check your plan and billing details.",
+                    "error_code": 429,
+                    "error": "ERR_BAD_RESPONSE"
+                }
+            )
+        else:
+            # For other errors, return a 500 error
+            raise HTTPException(status_code=500, detail=f"Error generating topics: {str(e)}")
     finally:
         if conn:
             conn.close()

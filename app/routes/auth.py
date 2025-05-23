@@ -166,9 +166,9 @@ async def google_callback(code: str = None, error: str = None, scope: str = None
         print("=======================================\n")
         
         # Frontend URLs - sử dụng từ môi trường hoặc cấu hình
-        frontend_url = "http://localhost:8080"  # Flowa landing page
-        dashboard_url = "https://localhost:3000" # Flowa_prod dashboard
-        token_handler_url = "https://localhost:3000/token-handler" # Token handler page
+        frontend_url = "https://flowa.one"  # Flowa landing page
+        dashboard_url = "https://ai.flowa.one" # Flowa_prod dashboard
+        token_handler_url = "https://ai.flowa.one/token-handler" # Token handler page
         
         if error:
             print(f"[ERROR] Google Auth Error: {error}")
@@ -215,7 +215,7 @@ async def google_callback(code: str = None, error: str = None, scope: str = None
         
         # Luôn chuyển hướng đến trang xử lý token trong mọi trường hợp
         fallback_token = "emergency_fallback_token"
-        token_handler_url = "https://localhost:3000/token-handler"
+        token_handler_url = "https://ai.flowa.one/token-handler"
         redirect_url = f"{token_handler_url}?token={fallback_token}&error=internal_server_error&message=Server+error"
         return RedirectResponse(url=redirect_url)
 

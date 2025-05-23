@@ -66,13 +66,13 @@ async def google_callback(code: str = Query(None), error: str = Query(None), sta
     if error:
         logger.error(f"Google auth error: {error}")
         # Chuyển hướng đến trang lỗi
-        error_url = "http://localhost:8080/login?error=google_auth_failed&message=" + error
+        error_url = "https://flowa.one/login?error=google_auth_failed&message=" + error
         return RedirectResponse(url=error_url)
     
     # Kiểm tra có mã xác thực không
     if not code:
         logger.error("No authorization code in callback")
-        error_url = "http://localhost:8080/login?error=no_auth_code"
+        error_url = "https://flowa.one/login?error=no_auth_code"
         return RedirectResponse(url=error_url)
     
     try:
@@ -85,11 +85,11 @@ async def google_callback(code: str = Query(None), error: str = Query(None), sta
     except HTTPException as e:
         # Xử lý lỗi HTTPException
         logger.error(f"HTTP error in callback: {e.detail}")
-        error_url = f"http://localhost:8080/login?error=auth_failed&message={e.detail}"
+        error_url = f"https://flowa.one/login?error=auth_failed&message={e.detail}"
         return RedirectResponse(url=error_url)
         
     except Exception as e:
         # Xử lý lỗi không mong muốn
         logger.error(f"Unexpected error in callback: {str(e)}")
-        error_url = "http://localhost:8080/login?error=server_error&message=Internal server error"
+        error_url = "https://flowa.one/login?error=server_error&message=Internal server error"
         return RedirectResponse(url=error_url)
