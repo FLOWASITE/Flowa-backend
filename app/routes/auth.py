@@ -107,6 +107,18 @@ async def google_auth(auth_data: GoogleAuthRequest, response: Response):
     
     return token_data
 
+@router.options("/verify-token")
+async def verify_token_options():
+    # Handle OPTIONS preflight request for CORS
+    from fastapi.responses import JSONResponse
+    response = JSONResponse(content={})
+    # Add CORS headers manually
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
+    response.headers["Access-Control-Max-Age"] = "600"
+    return response
+
 @router.post("/verify-token")
 async def verify_token(request: Request):
     """
@@ -117,24 +129,29 @@ async def verify_token(request: Request):
     """
     # Import controller extension
     from app.controllers.auth_controller_extension import AuthControllerExtension
+    from fastapi.responses import JSONResponse
     
     # Lấy token từ header Authorization
     authorization = request.headers.get("Authorization")
     
     if not authorization:
-        return {"valid": False, "message": "Missing Authorization header"}
+        result = {"valid": False, "message": "Missing Authorization header"}
+    else:
+        # In ra thông tin debug
+        print(f"Authorization header: {authorization}")
+        
+        # Xác thực token
+        auth_controller_extension = AuthControllerExtension()
+        result = await auth_controller_extension.verify_token(authorization)
+        
+        # In ra kết quả xác thực
+        print(f"Verification result: {result}")
     
-    # In ra thông tin debug
-    print(f"Authorization header: {authorization}")
-    
-    # Xác thực token
-    auth_controller_extension = AuthControllerExtension()
-    result = await auth_controller_extension.verify_token(authorization)
-    
-    # In ra kết quả xác thực
-    print(f"Verification result: {result}")
-    
-    return result
+    # Create a response with CORS headers
+    response = JSONResponse(content=result)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 @router.get("/google/url")
 async def get_google_auth_url():

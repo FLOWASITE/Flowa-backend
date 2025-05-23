@@ -19,7 +19,10 @@ origins = [
     "https://localhost:3000",    # Dashboard URL
     "https://127.0.0.1:3000",    # Dashboard URL (IP)
     "http://localhost:3001",    # Alternative Dashboard port
-    "http://127.0.0.1:3001"     # Alternative Dashboard port (IP)
+    "http://127.0.0.1:3001",
+    "https://api.flowa.one",
+    "https://flowa.one",
+    "https://ai.flowa.one",     # Alternative Dashboard port (IP)
 ]
 
 app.add_middleware(
